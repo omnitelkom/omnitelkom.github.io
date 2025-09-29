@@ -1,2 +1,1 @@
-# omnitelkom.github.io
 Dashboard
