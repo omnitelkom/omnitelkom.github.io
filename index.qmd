@@ -1799,3 +1799,27 @@ list(
   value = ""
 )
 ```
+
+
+
+<!-- letakkan setelah chunk R di index.qmd -->
+<div id="protected" style="display:none;">
+  <!-- Quarto akan me-render output DT di sini -->
+</div>
+
+<script>
+const PASSWORD = "omni2025"; // ganti password
+function check() {
+  let p = prompt("Masukkan password:");
+  if(p === PASSWORD) {
+    document.getElementById("protected").style.display = "block";
+  } else {
+    document.body.innerHTML = "<h2>Akses ditolak</h2>";
+  }
+}
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", check);
+} else {
+  check();
+}
+</script>
