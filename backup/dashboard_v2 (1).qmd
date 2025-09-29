@@ -1,0 +1,1833 @@
+---
+title: "Telkom University"
+format: dashboard
+#    nav-buttons: [github]
+#    github: https://github.com/posit-conf-2024/olympicdash
+logo: images.png
+#logo-alt: "Olympics logo with multicolored circles."
+fig-width: 10
+fig-asp: 0.3
+theme: [sandstone, themes/dashboard.scss]
+---
+
+```{r}
+library(shiny)
+library(readxl)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(DT)
+```
+
+```{r}
+# Memuat data
+df1 <- read_excel("teskepribadian_export_20241021.xlsx")
+```
+
+```{r}
+# Cek NA
+#sum(is.na(df1$Fakultas))
+#sum(is.na(df1$ProgramStudi))
+```
+
+```{r}
+# Delete data if "current_distress", "variable_response_inconsistency" >= 70
+df1 <- df1[!(df1$variable_response_inconsistency >= 70),]
+```
+
+
+```{r}
+# Preproses data - Hapus Kata Fakultas di Kolom Fakultas
+df1$Fakultas <- gsub("Fakultas ", "", df1$Fakultas)
+
+df1 <- df1 |>
+  # Delete duplicate rows if all column values are the same
+  distinct(.keep_all = TRUE)
+
+
+
+df1[df1$Fakultas == "Komunikasi Dan Ilmu Sosial","Fakultas"] <- "Komunikasi dan Ilmu Sosial"
+#  unique(df1$ProgramStudi)
+```
+
+
+```{r}
+## Cek jumlah duplikat nrp
+library(dplyr)
+
+# Cari NRP yang duplikat
+duplikat_nrp <- df1 %>%
+  group_by(nrp) %>%
+  filter(n() > 1) %>%
+  ungroup()
+```
+
+```{r}
+df1_raw <- df1
+# nrow(df1)
+# nrow(duplikat_nrp)
+# df1$nrp
+# df1$name
+# df1$faculty
+# tab(df1[,4:47]
+```
+
+```{r}
+#nrow(df1_raw)
+#nrow(df1)
+#length(unique(df1$faculty))
+#sum(!is.na(df1$faculty))
+```
+#  {.sidebar}
+
+Dasbor ini menampilkan statistik untuk:
+
+**Hasil Tes Tipe Kepribadian dan Gangguan Kepribadian Mahasisswa Telkom University**
+
+------------------------------------------------------------------------
+
+|                          |     |
+|--------------------------|-----|
+| **Jumlah Reponden** |  39259 |
+| **Data Valid (VI > 70)**            |  34625 |
+| **Data Valid dan Tidak Duplikat**            |  31667 |
+| **Fakultas**               |  7 |
+| **Program Studi**       |  53 |
+------------------------------------------------------------------------
+
+Keterangan:
+
+- VI = Variable Response Inconsistency
+
+- Dari 31667 terdapat 2495 mahasiswa 2x tes OMNI 
+
+::: {.callout-note collapse="true"}
+
+## Disclaimer
+
+Inventori Kepribadian OMNI (OMNI Personality Inventory) adalah kuesioner self-report yang mengukur ciri-ciri kepribadian normal dan abnormal pada orang dewasa dan remaja berusia 18–74 tahun:
+
+- Jumlah item: 375 item
+- Konstruk Faktor: 7 ciri
+- Konstruk Normal: 25 ciri
+- Gangguan Kepribadian: 10 ciri
+
+[https://doi.org/10.1177/0734282905285789](https://doi.org/10.1177/0734282905285789)
+
+:::
+
+```{r}
+df1$faculty <- df1$Fakultas
+df1 <- df1[,-c(1,4)]
+```
+
+```{r}
+df_Normal <- df1[,c(1:3,4:28)] # Tes Normal
+df_Gangguan <- df1[,c(1:3,29:38)] # Tes Gangguan
+df_Faktor <- df1[,c(1:3,39:45)] # Tes Faktor
+df_Validitas <- df1[,c(1:3,46:47)] # Tes Validitas
+```
+
+# Pengantar
+## Row {height="20%"}
+```{r}
+#| label: Demografi
+#| results: hide
+# Hitung jumlah mahssis tanpa fakutlas
+df1_abnormal <- df1 %>%
+  filter(rowSums(select(., 29:38) >= 70, na.rm = TRUE) > 0)
+n_total <- nrow(df1)
+n_dis <- nrow(df1_abnormal)
+prop0 <- n_dis / n_total * 100
+
+df1_abnormal <- df1 %>%
+  filter(rowSums(select(., 29:38) >= 70, na.rm = TRUE) > 1)
+n_total <- nrow(df1)
+n_dis <- nrow(df1_abnormal)
+prop1 <- n_dis / n_total * 100
+
+df1_abnormal <- df1 %>%
+  filter(rowSums(select(., 29:38) >= 70, na.rm = TRUE) > 4)
+n_total <- nrow(df1)
+n_dis <- nrow(df1_abnormal)
+prop2 <- n_dis / n_total * 100
+```
+
+
+
+```{r}
+#| component: valuebox
+#| title: "Proporsi Mahasiswa dengan Gangguan Kepribadian (Minimal 1)"
+
+list(
+  icon = "person",
+  color = "red",
+  value = paste0(round(prop0, 1), "%"," ", "(", prop0/100*nrow(df1),")")
+)
+```
+```{r}
+#| component: valuebox
+#| title: "Proporsi Mahasiswa dengan >1 Gangguan Kepribadian"
+
+list(
+  icon = "person",
+  color = "yellow",
+  value = paste0(round(prop1, 1), "%"," ", "(", prop1/100*nrow(df1),")")
+)
+```
+```{r}
+#| component: valuebox
+#| title: "Proporsi Mahasiswa dengan >4 Gangguan Kepribadian"
+
+list(
+  icon = "person",
+  color = "primary",
+  value = paste0(round(prop2, 1), "%"," ", "(", prop2/100*nrow(df1),")")
+)
+```
+
+## Row {height="80%"}
+### Column {width="40%"}
+#### Row {height="60%"}
+```{r}
+#| title: Kategori Skor Sifat Normal dan Faktor
+
+## Load necessary library
+library(DT)
+
+# Create a data frame with the translated categories, keeping original column names
+data <- data.frame(
+  "Rentang Skor" = c("< 35", "35-44", "45-55", "56-65", ">65"),
+  "Kategori" = c("Rendah", "Rata-rata rendah", "Rata-rata", 
+                 "Rata-rata tinggi", "Tinggi"),
+  check.names = FALSE  # Preserve column names with spaces
+)
+
+# Display the table with DT for a visually appealing format
+datatable(data, 
+          options = list(pageLength = 5, # Sets number of rows per page
+                         dom = 't'), # Hides the search bar and pagination,
+          rownames = T) %>% 
+  formatStyle(columns = c("Rentang Skor", "Kategori"),
+              backgroundColor = styleEqual(c("< 35", "35-44", "45-55", "56-65", ">65"),
+                                           c( "#FFD1A1", "#FFC081", "#FFA561", "#FF8E41", "#FF6E21")))
+```
+#### Row {height="40%"}
+```{r}
+#| title: Kategori Skor Gangguan Kepribadian
+
+## Load necessary library
+library(DT)
+
+# Create a data frame with the translated categories, keeping original column names
+data <- data.frame(
+  "Rentang Skor" = c("<70", ">=70"),
+  "Kategori" = c("Normal", "Gangguan Kepribadian"),
+  check.names = FALSE  # Preserve column names with spaces
+)
+
+# Display the table with DT for a visually appealing format
+datatable(data, 
+          options = list(pageLength = 5, # Sets number of rows per page
+                         dom = 't'), # Hides the search bar and pagination,
+          rownames = T) %>% 
+  formatStyle(columns = c("Rentang Skor", "Kategori"),
+              backgroundColor = styleEqual(c("<70", ">=70"),
+                                           c( "#FFD1A1", "#FF6E21")))
+```
+
+### Column {width="60%"}
+
+```{r}
+#| title: OMNI Personality Inventory
+# Displaying the image using Markdown syntax
+knitr::include_graphics("omni.png")
+```
+
+# Demografi
+## Row {height="50%"}
+### Column {width="50%"}
+```{r}
+#| title: Jumlah Mahasiswa per Fakultas
+#plotly
+library(dplyr)
+library(plotly)
+
+df1 %>%
+  count(faculty, .drop = FALSE) %>%
+  mutate(n_text = paste(scales::number(n, big.mark = ","), "Mahasiswa")) %>%
+  plot_ly(
+    x = ~n,
+    y = ~faculty,
+    hovertemplate = "%{hovertext}<extra></extra>",
+    hovertext = ~n_text,
+    type = "bar",
+    orientation = "h",
+    name = "",
+    marker = list(color = "steelblue")
+  ) %>%
+  layout(
+    title = "",
+    xaxis = list(title = ""),
+    yaxis = list(title = "", ticksuffix = " ", tickfont = list(size = 12))
+  ) %>%
+  config(displayModeBar = F)
+```
+
+### Column {width="50%"}
+```{r}
+#| title: Jumlah Mahasiswa per Program Studi
+# Memuat library yang diperlukan
+library(dplyr)
+library(DT)
+
+# Menghitung jumlah mahasiswa per Program Studi
+df_table <- df1 %>%
+  count(ProgramStudi, .drop = F) %>%
+  mutate(`Jumlah Mahasiswa` = scales::number(n, big.mark = ","))  %>%
+   arrange(desc(n)) %>%
+  select(ProgramStudi, `Jumlah Mahasiswa`)  # Format angka dengan tanda koma
+
+# Menampilkan tabel interaktif dengan DT
+datatable(
+  df_table,
+  options = list(
+    dom = 't',  # Hanya menampilkan tabel tanpa fitur pencarian dan pagination
+    pageLength = 10,  # Jumlah baris per halaman
+    autoWidth = TRUE  # Menyesuaikan lebar kolom secara otomatis
+  )
+)
+```
+## Row {height="50%"}
+### Column {width="50%".tabset}
+```{r}
+#| title: Proporsi Mahasiswa dengan Gangguan Kepribadian per Fakultas
+library(scales)
+df1_abnormal <- df1 %>%
+  filter(rowSums(select(., 29:38) >= 70, na.rm = TRUE) > 0)
+# Menghitung total mahasiswa per fakultas dari df1
+total_per_fakultas <- df1 %>%
+  count(faculty, .drop = FALSE) %>%
+  rename(total_fakultas = n)
+
+# Menggabungkan dengan df1_abnormal untuk menghitung proporsi abnormal per fakultas dan mengurutkan
+df_abnormal_plot <- df1_abnormal %>%
+  count(faculty, .drop = FALSE) %>%
+  left_join(total_per_fakultas, by = "faculty") %>%
+  mutate(
+    proporsi = n / total_fakultas * 100,  # Menghitung proporsi per fakultas
+    n_text = paste0(round(proporsi, 1), "%")  # Menampilkan proporsi dalam format persen
+  ) %>%
+  arrange(proporsi) %>%  # Mengurutkan berdasarkan proporsi
+  mutate(faculty = factor(faculty, levels = unique(faculty)))  # Set factor levels
+
+# Membuat plot dengan pengurutan faculty
+df_abnormal_plot %>%
+  plot_ly(
+    x = ~proporsi,
+    y = ~faculty,
+    hovertemplate = "%{hovertext}<extra></extra>",
+    hovertext = ~n_text,
+    type = "bar",
+    orientation = "h",
+    name = "",
+    marker = list(color = "steelblue")
+  ) %>%
+  layout(
+    title = "",
+    xaxis = list(title = ""),
+    yaxis = list(title = "", ticksuffix = " ", tickfont = list(size = 12))
+  ) %>%
+  config(displayModeBar = F)
+```
+
+```{r}
+#| title: Gangguan Kepribadian Terbanyak
+
+# Menggabungkan dengan df1_abnormal untuk menghitung proporsi abnormal per fakultas dan mengurutkan
+df1_abnormal <- df_Gangguan %>%
+  filter(rowSums(select(., 4:13) >= 70, na.rm = TRUE) > 0)
+hasil_abnormal <- df1_abnormal %>%
+  summarise(across(4:13, ~sum(. >= 70, na.rm = TRUE)))
+
+df_abnormal_plot <- data.frame(
+  gangguan = names(hasil_abnormal),
+  jumlah = unlist(hasil_abnormal)/nrow(df1)
+)
+
+# Mengurutkan data berdasarkan jumlah dari besar ke kecil
+df_abnormal_plot <- df_abnormal_plot %>%
+  arrange(desc(jumlah)) %>%
+  mutate(gangguan = factor(gangguan, levels = rev(gangguan)))  # Menjadikan gangguan sebagai faktor berurut
+
+# Membuat plot interaktif
+plot_ly(
+  data = df_abnormal_plot,
+  x = ~jumlah,
+  y = ~gangguan,
+  type = "bar",
+  orientation = "h",
+  name = "",
+  marker = list(
+    color = ~jumlah,  # Warna berdasarkan nilai
+    colorscale = "red"  # Gradasi warna bawaan plotly
+  )
+) %>%
+  layout(
+    title = "",
+    xaxis = list(title = "Proporsi", tickformat = ".0%"),
+    yaxis = list(title = "", tickfont = list(size = 12)),
+    bargap = 0.2
+  ) %>%
+  config(displayModeBar = FALSE)
+```
+
+# Disorder
+## Row {height="60%".tabset}
+```{r}
+#| title: Proporsi Gangguan Kepribadian per Fakultas
+library(dplyr)
+library(plotly)
+
+# Ubah value di kolom 4 sampai 13 di df_Gangguan, jika >= 70 jadi 1, jika < 70 jadi 0
+df_Gangguan1 <- df_Gangguan %>%
+  mutate(across(4:13, ~ifelse(. >= 70, 1, 0)))
+
+# Mengubah data ke format long dan menghitung proporsi
+df_long <- df_Gangguan1 %>%
+  group_by(faculty) %>%
+  summarise(across(3:12, sum, na.rm = TRUE)) %>%
+  pivot_longer(cols = -faculty, names_to = "gangguan", values_to = "value") %>%
+  group_by(faculty) %>%
+  mutate(proporsi = value / sum(value))  # Menghitung proporsi per gangguan
+
+# Ganti NA di faculty dengan "NA Fakultas"
+df_long$faculty[is.na(df_long$faculty)] <- "NA"
+
+# Membuat plot dengan batang bertumpuk berdasarkan proporsi
+plot_ly(
+  data = df_long,
+  x = ~proporsi,
+  y = ~faculty,
+  color = ~gangguan,
+  type = "bar"
+) %>%
+  layout(
+    barmode = "stack",  # Membuat batang bertumpuk
+    title = "",
+    xaxis = list(title = "", tickformat = ".0%"),
+    yaxis = list(title = "")
+  ) %>%
+  config(displayModeBar = F)
+```
+
+```{r}
+df_Gangguan1 <- df_Gangguan %>%
+  mutate(
+  N_Gangguan = rowSums(select(., 4:13) >= 70, na.rm = TRUE)
+  ) %>%
+  select(N_Gangguan, everything()) %>%
+  filter(N_Gangguan > 0)
+```
+
+```{r}
+#| title: Distribusi Gangguan Kepribadian per Fakultas
+# Membuat tabel distribusi
+gangguan_faculty_table <- table(df_Gangguan1$N_Gangguan, df_Gangguan1$faculty)
+gangguan_faculty_df <- as.data.frame(as.table(gangguan_faculty_table))
+
+# Visualisasi dengan ggplot2
+ggplot(data = gangguan_faculty_df, aes(Var2, Var1, fill = Freq)) +
+  geom_tile(color = "white") +
+   geom_text(aes(label = Freq), color = "black", size = 3) +  # Menambahkan label
+  scale_fill_gradient(low = "lightblue", high = "blue", name = "Jumlah") +
+  labs(
+    title = "",
+    x = "",
+    y = "Jumlah Gangguan"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 30, hjust = 1, size = 8),
+    plot.title = element_text(hjust = 0.5, size = 14, face = "bold")
+  )
+```
+```{r}
+#| title: Hubungan Gangguan Kepribadian dengan Konstruk Faktor
+# Menghitung matriks korelasi hanya antara df_Gangguan dan df_Faktor
+gangguan_faktor_cor <- cor(
+  as.matrix(df_Gangguan[, 4:13]),  # Kolom-kolom dari df_Gangguan
+  as.matrix(df_Faktor[, 4:10])    # Kolom-kolom dari df_Faktor
+)
+
+# Mengubah matriks korelasi menjadi data frame untuk visualisasi
+cor_df <- as.data.frame(as.table(gangguan_faktor_cor))
+names(cor_df) <- c("Gangguan", "Faktor", "Correlation")
+
+# Visualisasi dengan ggplot2
+library(ggplot2)
+
+ggplot(cor_df, aes(x = Faktor, y = Gangguan, fill = Correlation)) +
+  geom_tile(color = "white") +  # Membuat kotak heatmap
+  geom_text(aes(label = round(Correlation, 2)), color = "black", size = 3) +  # Menambahkan label korelasi
+  scale_fill_gradient2(
+    low = "blue", mid = "white", high = "red",
+    midpoint = 0, limits = c(-1, 1),
+    name = "Korelasi"
+  ) +
+  labs(
+    title = "",
+    x = "",
+    y = "Gangguan Kepribadian"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 8),
+    plot.title = element_text(hjust = 0.5, size = 14, face = "bold")
+  )
+```
+
+```{r}
+#| title: Hubungan Gangguan Kepribadian dengan Konstruk Normal 1
+
+# Menghitung matriks korelasi hanya antara df_Gangguan dan df_Faktor
+gangguan_faktor_cor <- cor(
+  as.matrix(df_Gangguan[, 4:13]),  # Kolom-kolom dari df_Gangguan
+  as.matrix(df_Normal[, 4:16])    # Kolom-kolom dari df_Faktor
+)
+
+# Mengubah matriks korelasi menjadi data frame untuk visualisasi
+cor_df <- as.data.frame(as.table(gangguan_faktor_cor))
+names(cor_df) <- c("Gangguan", "Faktor", "Correlation")
+
+# Visualisasi dengan ggplot2
+library(ggplot2)
+
+ggplot(cor_df, aes(x = Faktor, y = Gangguan, fill = Correlation)) +
+  geom_tile(color = "white") +  # Membuat kotak heatmap
+  geom_text(aes(label = round(Correlation, 2)), color = "black", size = 3) +  # Menambahkan label korelasi
+  scale_fill_gradient2(
+    low = "blue", mid = "white", high = "red",
+    midpoint = 0, limits = c(-1, 1),
+    name = "Korelasi"
+  ) +
+  labs(
+    title = "",
+    x = "",
+    y = "Gangguan Kepribadian"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 8),
+    plot.title = element_text(hjust = 0.5, size = 14, face = "bold")
+  )
+```
+
+```{r}
+#| title: Hubungan Gangguan Kepribadian dengan Konstruk Normal 2
+
+gangguan_faktor_cor <- cor(
+  as.matrix(df_Gangguan[, 4:13]),  # Kolom-kolom dari df_Gangguan
+  as.matrix(df_Normal[, 17:28])    # Kolom-kolom dari df_Faktor
+)
+
+# Mengubah matriks korelasi menjadi data frame untuk visualisasi
+cor_df <- as.data.frame(as.table(gangguan_faktor_cor))
+names(cor_df) <- c("Gangguan", "Faktor", "Correlation")
+
+# Visualisasi dengan ggplot2
+library(ggplot2)
+
+ggplot(cor_df, aes(x = Faktor, y = Gangguan, fill = Correlation)) +
+  geom_tile(color = "white") +  # Membuat kotak heatmap
+  geom_text(aes(label = round(Correlation, 2)), color = "black", size = 3) +  # Menambahkan label korelasi
+  scale_fill_gradient2(
+    low = "blue", mid = "white", high = "red",
+    midpoint = 0, limits = c(-1, 1),
+    name = "Korelasi"
+  ) +
+  labs(
+    title = "",
+    x = "",
+    y = "Gangguan Kepribadian"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 8),
+    plot.title = element_text(hjust = 0.5, size = 14, face = "bold")
+  )
+```
+
+## Row {height="40%"}
+
+```{r}
+#| title: Distribusi Jumlah Kepemilikan Gangguan Berdasarkan Program Studi
+# Membuat tabel distribusi
+gangguan_program_table <- as.data.frame.matrix(table(df_Gangguan1$ProgramStudi,df_Gangguan1$N_Gangguan))
+gangguan_program_table$ProgramStudi <- rownames(gangguan_program_table)
+rownames(gangguan_program_table) <- NULL
+gangguan_program_table <- gangguan_program_table |>
+  select(ProgramStudi, everything())
+# Menampilkan tabel sebagai DataTable interaktif
+datatable(
+  gangguan_program_table,
+  options = list(
+    dom = 't',  # Hanya menampilkan tabel tanpa fitur pencarian dan pagination
+    pageLength = 10,  # Jumlah baris per halaman (jika pagination diaktifkan)
+    autoWidth = TRUE  # Menyesuaikan lebar kolom secara otomatis
+  )
+)
+```
+
+# Konstruk Normal dan Faktor
+## Row {height="100%"}
+### Column {width="50%".tabset}
+#### Agreeableness
+
+```{r}
+library(dplyr)
+library(ggplot2)
+
+# Klasifikasi dan transformasi data
+df_Faktor1 <- df_Faktor %>%
+  mutate(across(4:10, ~case_when(
+    . < 35 ~ "Low",
+    . >= 35 & . <= 44 ~ "Low average",
+    . >= 45 & . <= 55 ~ "Average",
+    . >= 56 & . <= 65 ~ "High average",
+    . >= 66 ~ "High",
+    TRUE ~ NA_character_
+  ))) %>%
+  mutate(across(4:10, ~factor(., levels = c("Low", "Low average", "Average", "High average", "High"), ordered = TRUE)))
+```
+
+```{r}
+#| title: Konstruk Faktor - Agreeableness Rendah
+
+# Agreeableness: Cari Yang Rendah
+# Perbaikan kode transformasi data
+library(dplyr)
+library(ggplot2)
+
+# Klasifikasi dan transformasi data
+df_Faktor1 <- df_Faktor %>%
+  mutate(across(4:10, ~case_when(
+    . < 35 ~ "Low",
+    . >= 35 & . <= 44 ~ "Low average",
+    . >= 45 & . <= 55 ~ "Average",
+    . >= 56 & . <= 65 ~ "High average",
+    . >= 66 ~ "High",
+    TRUE ~ NA_character_
+  ))) %>%
+  mutate(across(4:10, ~factor(., levels = c("Low", "Low average", "Average", "High average", "High"), ordered = TRUE)))
+
+# Menghitung proporsi berdasarkan fakultas
+prop_table <- df_Faktor1 %>%
+  group_by(faculty) %>%
+  summarise(
+    Total = n(),
+    Low_Prop = sum(agreeableness == "Low", na.rm = TRUE) / n()
+  ) %>% 
+  mutate(
+    Faktor = "Agreeableness"
+  )
+# Visualisasi dengan plotly
+plot_ly(
+  data= prop_table,
+  x = ~Low_Prop,
+  y = ~faculty,
+  type = 'bar',
+  marker = list(color = "steelblue")
+) %>%
+  layout(
+    title = "",
+    xaxis = list(title = "Proporsi", tickformat = ".0%"),
+    yaxis = list(title = ""),
+    bargap = 0.3,
+    showlegend = FALSE
+  ) %>%
+  config(displayModeBar = F)
+```
+#### Conscientiousness
+```{r}
+#| title: Konstruk Faktor - Conscientiousness Tinggi
+
+# Agreeableness: Cari Yang Rendah
+# Menghitung proporsi berdasarkan fakultas
+# Menghitung proporsi berdasarkan fakultas
+prop_table <- df_Faktor1 %>%
+  group_by(faculty) %>%
+  summarise(
+    Total = n(),
+    Low_Prop = sum(conscientiousness == "High", na.rm = TRUE) / n()
+  )
+# Visualisasi dengan plotly
+plot_ly(
+  data= prop_table,
+  x = ~Low_Prop,
+  y = ~faculty,
+  type = 'bar',
+  marker = list(color = "#FF6E21")
+) %>%
+  layout(
+    title = "",
+    xaxis = list(title = "Proporsi", tickformat = ".0%"),
+    yaxis = list(title = ""),
+    bargap = 0.3,
+    showlegend = FALSE
+  ) %>%
+  config(displayModeBar = F)
+```
+
+#### Extraversion
+
+```{r}
+#| title: Konstruk Faktor - Extraversion Rendah
+
+# Agreeableness: Cari Yang Rendah
+# Menghitung proporsi berdasarkan fakultas
+# Menghitung proporsi berdasarkan fakultas
+prop_table <- df_Faktor1 %>%
+  group_by(faculty) %>%
+  summarise(
+    Total = n(),
+    Low_Prop = sum(extraversion == "Low", na.rm = TRUE) / n()
+  ) %>% 
+  mutate(
+    Faktor = "Extraversion"
+  )
+# Visualisasi dengan plotly
+plot_ly(
+  data= prop_table,
+  x = ~Low_Prop,
+  y = ~faculty,
+  type = 'bar',
+  marker = list(color = "steelblue")
+) %>%
+  layout(
+    title = "",
+    xaxis = list(title = "Proporsi", tickformat = ".0%"),
+    yaxis = list(title = ""),
+    bargap = 0.3,
+    showlegend = FALSE
+  ) %>%
+  config(displayModeBar = F)
+```
+#### Narcissism
+```{r}
+#| title: Konstruk Faktor - Narcissism Tinggi
+
+# Agreeableness: Cari Yang Rendah
+# Menghitung proporsi berdasarkan fakultas
+# Menghitung proporsi berdasarkan fakultas
+prop_table <- df_Faktor1 %>%
+  group_by(faculty) %>%
+  summarise(
+    Total = n(),
+    Low_Prop = sum(narcissism == "High", na.rm = TRUE) / n()
+  )
+# Visualisasi dengan plotly
+plot_ly(
+  data= prop_table,
+  x = ~Low_Prop,
+  y = ~faculty,
+  type = 'bar',
+  marker = list(color = "#FF6E21")
+) %>%
+  layout(
+    title = "",
+    xaxis = list(title = "Proporsi", tickformat = ".0%"),
+    yaxis = list(title = ""),
+    bargap = 0.3,
+    showlegend = FALSE
+  ) %>%
+  config(displayModeBar = F)
+```
+#### Neuroticism
+```{r}
+#| title: Konstruk Faktor - Neuroticism Tinggi
+
+# Agreeableness: Cari Yang Rendah
+# Menghitung proporsi berdasarkan fakultas
+# Menghitung proporsi berdasarkan fakultas
+prop_table <- df_Faktor1 %>%
+  group_by(faculty) %>%
+  summarise(
+    Total = n(),
+    Low_Prop = sum(neuroticism == "High", na.rm = TRUE) / n()
+  ) %>% 
+  mutate(
+    Faktor = "Neuroticism"
+  )
+# Visualisasi dengan plotly
+plot_ly(
+  data= prop_table,
+  x = ~Low_Prop,
+  y = ~faculty,
+  type = 'bar',
+  marker = list(color = "#FF6E21")
+) %>%
+  layout(
+    title = "",
+    xaxis = list(title = "Proporsi", tickformat = ".0%"),
+    yaxis = list(title = ""),
+    bargap = 0.3,
+    showlegend = FALSE
+  ) %>%
+  config(displayModeBar = F)
+```
+#### Openness
+```{r}
+#| title: Konstruk Faktor - Openness Rendah
+
+# Agreeableness: Cari Yang Rendah
+# Menghitung proporsi berdasarkan fakultas
+# Menghitung proporsi berdasarkan fakultas
+prop_table <- df_Faktor1 %>%
+  group_by(faculty) %>%
+  summarise(
+    Total = n(),
+    Low_Prop = sum(openness == "Low", na.rm = TRUE) / n()
+  )
+# Visualisasi dengan plotly
+plot_ly(
+  data= prop_table,
+  x = ~Low_Prop,
+  y = ~faculty,
+  type = 'bar',
+  marker = list(color = "steelblue")
+) %>%
+  layout(
+    title = "",
+    xaxis = list(title = "Proporsi", tickformat = ".0%"),
+    yaxis = list(title = ""),
+    bargap = 0.3,
+    showlegend = FALSE
+  ) %>%
+  config(displayModeBar = F)
+```
+#### Sensation Seeking
+
+
+```{r}
+#| title: Konstruk Faktor - Sensation Seeking Tinggi
+
+# Agreeableness: Cari Yang Rendah
+# Menghitung proporsi berdasarkan fakultas
+# Menghitung proporsi berdasarkan fakultas
+prop_table <- df_Faktor1 %>%
+  group_by(faculty) %>%
+  summarise(
+    Total = n(),
+    Low_Prop = sum(sensation_seeking == "High", na.rm = TRUE) / n()
+  ) %>% 
+  mutate(
+    Faktor = "Sensation Seeking"
+  )
+# Visualisasi dengan plotly
+plot_ly(
+  data= prop_table,
+  x = ~Low_Prop,
+  y = ~faculty,
+  type = 'bar',
+  marker = list(color = "#FF6E21")
+) %>%
+  layout(
+    title = "",
+    xaxis = list(title = "Proporsi", tickformat = ".0%"),
+    yaxis = list(title = ""),
+    bargap = 0.3,
+    showlegend = FALSE
+  ) %>%
+  config(displayModeBar = F)
+```
+
+### Column {width="50%".tabset}
+
+```{r}
+# Klasifikasi dan transformasi data
+df_Normal1 <- df_Normal %>%
+  mutate(across(4:28, ~case_when(
+    . < 35 ~ "Low",
+    . >= 35 & . <= 44 ~ "Low average",
+    . >= 45 & . <= 55 ~ "Average",
+    . >= 56 & . <= 65 ~ "High average",
+    . >= 66 ~ "High",
+    TRUE ~ NA_character_
+  ))) %>%
+  mutate(across(4:10, ~factor(., levels = c("Low", "Low average", "Average", "High average", "High"), ordered = TRUE)))
+```
+
+#### aestheticism {.tabset}
+```{r}
+#| title: Konstruk Normal - Aestheticism Tinggi
+# Menghitung proporsi berdasarkan fakultas
+prop_table <- df_Normal1 %>%
+  group_by(faculty) %>%
+  summarise(
+    Total = n(),
+    Low_Prop = sum(aestheticism == "High", na.rm = TRUE) / n()
+  )
+# Visualisasi dengan plotly
+plot_ly(
+  data= prop_table,
+  x = ~Low_Prop,
+  y = ~faculty,
+  type = 'bar',
+  marker = list(color = "#FF6E21")
+) %>%
+  layout(
+    title = "",
+    xaxis = list(title = "Proporsi", tickformat = ".0%"),
+    yaxis = list(title = ""),
+    bargap = 0.3,
+    showlegend = FALSE
+  ) %>%
+  config(displayModeBar = F)
+```
+```{r}
+#| title: Konstruk Normal - Aestheticism Rendah
+# Menghitung proporsi berdasarkan fakultas
+prop_table <- df_Normal1 %>%
+  group_by(faculty) %>%
+  summarise(
+    Total = n(),
+    Low_Prop = sum(aestheticism == "Low", na.rm = TRUE) / n()
+  )
+# Visualisasi dengan plotly
+plot_ly(
+  data= prop_table,
+  x = ~Low_Prop,
+  y = ~faculty,
+  type = 'bar',
+  marker = list(color = "steelblue")
+) %>%
+  layout(
+    title = "",
+    xaxis = list(title = "Proporsi", tickformat = ".0%"),
+    yaxis = list(title = ""),
+    bargap = 0.3,
+    showlegend = FALSE
+  ) %>%
+  config(displayModeBar = F)
+```
+
+#### ambition {.tabset}
+```{r}
+#| title: Konstruk Normal - Ambition Tinggi
+# Menghitung proporsi berdasarkan fakultas
+prop_table <- df_Normal1 %>%
+  group_by(faculty) %>%
+  summarise(
+    Total = n(),
+    Low_Prop = sum(ambition == "High", na.rm = TRUE) / n()
+  )
+# Visualisasi dengan plotly
+plot_ly(
+  data= prop_table,
+  x = ~Low_Prop,
+  y = ~faculty,
+  type = 'bar',
+  marker = list(color = "#FF6E21")
+) %>%
+  layout(
+    title = "",
+    xaxis = list(title = "Proporsi", tickformat = ".0%"),
+    yaxis = list(title = ""),
+    bargap = 0.3,
+    showlegend = FALSE
+  ) %>%
+  config(displayModeBar = F)
+```
+```{r}
+#| title: Konstruk Normal - Ambition Rendah
+# Menghitung proporsi berdasarkan fakultas
+prop_table <- df_Normal1 %>%
+  group_by(faculty) %>%
+  summarise(
+    Total = n(),
+    Low_Prop = sum(ambition == "Low", na.rm = TRUE) / n()
+  )
+# Visualisasi dengan plotly
+plot_ly(
+  data= prop_table,
+  x = ~Low_Prop,
+  y = ~faculty,
+  type = 'bar',
+  marker = list(color = "steelblue")
+) %>%
+  layout(
+    title = "",
+    xaxis = list(title = "Proporsi", tickformat = ".0%"),
+    yaxis = list(title = ""),
+    bargap = 0.3,
+    showlegend = FALSE
+  ) %>%
+  config(displayModeBar = F)
+```
+
+#### anxiety
+```{r}
+#| title: Konstruk Normal - Anxiety Tinggi
+# Menghitung proporsi berdasarkan fakultas
+prop_table <- df_Normal1 %>%
+  group_by(faculty) %>%
+  summarise(
+    Total = n(),
+    Low_Prop = sum(anxiety == "High", na.rm = TRUE) / n()
+  )
+# Visualisasi dengan plotly
+plot_ly(
+  data= prop_table,
+  x = ~Low_Prop,
+  y = ~faculty,
+  type = 'bar',
+  marker = list(color = "#FF6E21")
+) %>%
+  layout(
+    title = "",
+    xaxis = list(title = "Proporsi", tickformat = ".0%"),
+    yaxis = list(title = ""),
+    bargap = 0.3,
+    showlegend = FALSE
+  ) %>%
+  config(displayModeBar = F)
+```
+#### assertiveness {.tabset}
+```{r}
+#| title: Konstruk Normal - Assertiveness Tinggi
+# Menghitung proporsi berdasarkan fakultas
+prop_table <- df_Normal1 %>%
+  group_by(faculty) %>%
+  summarise(
+    Total = n(),
+    Low_Prop = sum(assertiveness == "High", na.rm = TRUE) / n()
+  )
+# Visualisasi dengan plotly
+plot_ly(
+  data= prop_table,
+  x = ~Low_Prop,
+  y = ~faculty,
+  type = 'bar',
+  marker = list(color = "#FF6E21")
+) %>%
+  layout(
+    title = "",
+    xaxis = list(title = "Proporsi", tickformat = ".0%"),
+    yaxis = list(title = ""),
+    bargap = 0.3,
+    showlegend = FALSE
+  ) %>%
+  config(displayModeBar = F)
+```
+```{r}
+#| title: Konstruk Normal - Assertiveness Rendah
+# Menghitung proporsi berdasarkan fakultas
+prop_table <- df_Normal1 %>%
+  group_by(faculty) %>%
+  summarise(
+    Total = n(),
+    Low_Prop = sum(assertiveness == "Low", na.rm = TRUE) / n()
+  )
+# Visualisasi dengan plotly
+plot_ly(
+  data= prop_table,
+  x = ~Low_Prop,
+  y = ~faculty,
+  type = 'bar',
+  marker = list(color = "steelblue")
+) %>%
+  layout(
+    title = "",
+    xaxis = list(title = "Proporsi", tickformat = ".0%"),
+    yaxis = list(title = ""),
+    bargap = 0.3,
+    showlegend = FALSE
+  ) %>%
+  config(displayModeBar = F)
+```
+
+
+#### conventionality
+```{r}
+#| title: Konstruk Normal - Conventionality Rendah
+# Menghitung proporsi berdasarkan fakultas
+prop_table <- df_Normal1 %>%
+  group_by(faculty) %>%
+  summarise(
+    Total = n(),
+    Low_Prop = sum(conventionality == "Low", na.rm = TRUE) / n()
+  )
+# Visualisasi dengan plotly
+plot_ly(
+  data= prop_table,
+  x = ~Low_Prop,
+  y = ~faculty,
+  type = 'bar',
+  marker = list(color = "steelblue")
+) %>%
+  layout(
+    title = "",
+    xaxis = list(title = "Proporsi", tickformat = ".0%"),
+    yaxis = list(title = ""),
+    bargap = 0.3,
+    showlegend = FALSE
+  ) %>%
+  config(displayModeBar = F)
+```
+#### depression
+```{r}
+#| title: Konstruk Normal - Depression Tinggi
+
+# Menghitung proporsi berdasarkan fakultas
+prop_table <- df_Normal1 %>%
+  group_by(faculty) %>%
+  summarise(
+    Total = n(),
+    Low_Prop = sum(depression == "High", na.rm = TRUE) / n()
+  )
+# Visualisasi dengan plotly
+plot_ly(
+  data= prop_table,
+  x = ~Low_Prop,
+  y = ~faculty,
+  type = 'bar',
+  marker = list(color = "#FF6E21")
+) %>%
+  layout(
+    title = "",
+    xaxis = list(title = "Proporsi", tickformat = ".0%"),
+    yaxis = list(title = ""),
+    bargap = 0.3,
+    showlegend = FALSE
+  ) %>%
+  config(displayModeBar = F)
+```
+#### dutifulness
+```{r}
+#| title: Konstruk Normal - Dutifulness Rendah
+# Menghitung proporsi berdasarkan fakultas
+prop_table <- df_Normal1 %>%
+  group_by(faculty) %>%
+  summarise(
+    Total = n(),
+    Low_Prop = sum(dutifulness == "Low", na.rm = TRUE) / n()
+  )
+# Visualisasi dengan plotly
+plot_ly(
+  data= prop_table,
+  x = ~Low_Prop,
+  y = ~faculty,
+  type = 'bar',
+  marker = list(color = "steelblue")
+) %>%
+  layout(
+    title = "",
+    xaxis = list(title = "Proporsi", tickformat = ".0%"),
+    yaxis = list(title = ""),
+    bargap = 0.3,
+    showlegend = FALSE
+  ) %>%
+  config(displayModeBar = F)
+```
+#### excitement {.tabset}    
+```{r}
+#| title: Konstruk Normal - Excitement Tinggi
+# Menghitung proporsi berdasarkan fakultas
+prop_table <- df_Normal1 %>%
+  group_by(faculty) %>%
+  summarise(
+    Total = n(),
+    Low_Prop = sum(excitement == "High", na.rm = TRUE) / n()
+  )
+# Visualisasi dengan plotly
+plot_ly(
+  data= prop_table,
+  x = ~Low_Prop,
+  y = ~faculty,
+  type = 'bar',
+  marker = list(color = "#FF6E21")
+) %>%
+  layout(
+    title = "",
+    xaxis = list(title = "Proporsi", tickformat = ".0%"),
+    yaxis = list(title = ""),
+    bargap = 0.3,
+    showlegend = FALSE
+  ) %>%
+  config(displayModeBar = F)
+```
+```{r}
+#| title: Konstruk Normal - Excitement Rendah
+# Menghitung proporsi berdasarkan fakultas
+prop_table <- df_Normal1 %>%
+  group_by(faculty) %>%
+  summarise(
+    Total = n(),
+    Low_Prop = sum(excitement == "Low", na.rm = TRUE) / n()
+  )
+# Visualisasi dengan plotly
+plot_ly(
+  data= prop_table,
+  x = ~Low_Prop,
+  y = ~faculty,
+  type = 'bar',
+  marker = list(color = "steelblue")
+) %>%
+  layout(
+    title = "",
+    xaxis = list(title = "Proporsi", tickformat = ".0%"),
+    yaxis = list(title = ""),
+    bargap = 0.3,
+    showlegend = FALSE
+  ) %>%
+  config(displayModeBar = F)
+```
+#### Exhibitionism
+```{r}
+#| title: Konstruk Normal - Exhibitionism Tinggi
+
+# Menghitung proporsi berdasarkan fakultas
+prop_table <- df_Normal1 %>%
+  group_by(faculty) %>%
+  summarise(
+    Total = n(),
+    Low_Prop = sum(exhibitionism == "High", na.rm = TRUE) / n()
+  )
+# Visualisasi dengan plotly
+plot_ly(
+  data= prop_table,
+  x = ~Low_Prop,
+  y = ~faculty,
+  type = 'bar',
+  marker = list(color = "#FF6E21")
+) %>%
+  layout(
+    title = "",
+    xaxis = list(title = "Proporsi", tickformat = ".0%"),
+    yaxis = list(title = ""),
+    bargap = 0.3,
+    showlegend = FALSE
+  ) %>%
+  config(displayModeBar = F)
+```
+
+#### energy
+```{r}
+#| title: Konstruk Normal - Energy Rendah
+# Menghitung proporsi berdasarkan fakultas
+prop_table <- df_Normal1 %>%
+  group_by(faculty) %>%
+  summarise(
+    Total = n(),
+    Low_Prop = sum(energy == "Low", na.rm = TRUE) / n()
+  )
+# Visualisasi dengan plotly
+plot_ly(
+  data= prop_table,
+  x = ~Low_Prop,
+  y = ~faculty,
+  type = 'bar',
+  marker = list(color = "steelblue")
+) %>%
+  layout(
+    title = "",
+    xaxis = list(title = "Proporsi", tickformat = ".0%"),
+    yaxis = list(title = ""),
+    bargap = 0.3,
+    showlegend = FALSE
+  ) %>%
+  config(displayModeBar = F)
+```
+#### flexibility
+```{r}
+#| title: Konstruk Normal - Flexibility Rendah
+# Menghitung proporsi berdasarkan fakultas
+prop_table <- df_Normal1 %>%
+  group_by(faculty) %>%
+  summarise(
+    Total = n(),
+    Low_Prop = sum(flexibility == "Low", na.rm = TRUE) / n()
+  )
+# Visualisasi dengan plotly
+plot_ly(
+  data= prop_table,
+  x = ~Low_Prop,
+  y = ~faculty,
+  type = 'bar',
+  marker = list(color = "steelblue")
+) %>%
+  layout(
+    title = "",
+    xaxis = list(title = "Proporsi", tickformat = ".0%"),
+    yaxis = list(title = ""),
+    bargap = 0.3,
+    showlegend = FALSE
+  ) %>%
+  config(displayModeBar = F)
+```
+#### hostility
+```{r}
+#| title: Konstruk Normal - Hostility Tinggi
+
+# Menghitung proporsi berdasarkan fakultas
+prop_table <- df_Normal1 %>%
+  group_by(faculty) %>%
+  summarise(
+    Total = n(),
+    Low_Prop = sum(hostility == "High", na.rm = TRUE) / n()
+  )
+# Visualisasi dengan plotly
+plot_ly(
+  data= prop_table,
+  x = ~Low_Prop,
+  y = ~faculty,
+  type = 'bar',
+  marker = list(color = "#FF6E21")
+) %>%
+  layout(
+    title = "",
+    xaxis = list(title = "Proporsi", tickformat = ".0%"),
+    yaxis = list(title = ""),
+    bargap = 0.3,
+    showlegend = FALSE
+  ) %>%
+  config(displayModeBar = F)
+```
+#### impulsiveness
+```{r}
+#| title: Konstruk Normal - Impulsiveness Tinggi
+
+# Menghitung proporsi berdasarkan fakultas
+prop_table <- df_Normal1 %>%
+  group_by(faculty) %>%
+  summarise(
+    Total = n(),
+    Low_Prop = sum(impulsiveness == "High", na.rm = TRUE) / n()
+  )
+# Visualisasi dengan plotly
+plot_ly(
+  data= prop_table,
+  x = ~Low_Prop,
+  y = ~faculty,
+  type = 'bar',
+  marker = list(color = "#FF6E21")
+) %>%
+  layout(
+    title = "",
+    xaxis = list(title = "Proporsi", tickformat = ".0%"),
+    yaxis = list(title = ""),
+    bargap = 0.3,
+    showlegend = FALSE
+  ) %>%
+  config(displayModeBar = F)
+```
+#### intellect {.tabset}
+```{r}
+#| title: Konstruk Normal - Intellect Tinggi
+# Menghitung proporsi berdasarkan fakultas
+prop_table <- df_Normal1 %>%
+  group_by(faculty) %>%
+  summarise(
+    Total = n(),
+    Low_Prop = sum(intellect == "High", na.rm = TRUE) / n()
+  )
+# Visualisasi dengan plotly
+plot_ly(
+  data= prop_table,
+  x = ~Low_Prop,
+  y = ~faculty,
+  type = 'bar',
+  marker = list(color = "#FF6E21")
+) %>%
+  layout(
+    title = "",
+    xaxis = list(title = "Proporsi", tickformat = ".0%"),
+    yaxis = list(title = ""),
+    bargap = 0.3,
+    showlegend = FALSE
+  ) %>%
+  config(displayModeBar = F)
+```
+```{r}
+#| title: Konstruk Normal - Intellect Rendah
+# Menghitung proporsi berdasarkan fakultas
+prop_table <- df_Normal1 %>%
+  group_by(faculty) %>%
+  summarise(
+    Total = n(),
+    Low_Prop = sum(intellect == "Low", na.rm = TRUE) / n()
+  )
+# Visualisasi dengan plotly
+plot_ly(
+  data= prop_table,
+  x = ~Low_Prop,
+  y = ~faculty,
+  type = 'bar',
+  marker = list(color = "steelblue")
+) %>%
+  layout(
+    title = "",
+    xaxis = list(title = "Proporsi", tickformat = ".0%"),
+    yaxis = list(title = ""),
+    bargap = 0.3,
+    showlegend = FALSE
+  ) %>%
+  config(displayModeBar = F)
+```
+#### irritability      
+```{r}
+#| title: Konstruk Normal - Irritability Tinggi
+
+# Menghitung proporsi berdasarkan fakultas
+prop_table <- df_Normal1 %>%
+  group_by(faculty) %>%
+  summarise(
+    Total = n(),
+    Low_Prop = sum(irritability == "High", na.rm = TRUE) / n()
+  )
+# Visualisasi dengan plotly
+plot_ly(
+  data= prop_table,
+  x = ~Low_Prop,
+  y = ~faculty,
+  type = 'bar',
+  marker = list(color = "#FF6E21")
+) %>%
+  layout(
+    title = "",
+    xaxis = list(title = "Proporsi", tickformat = ".0%"),
+    yaxis = list(title = ""),
+    bargap = 0.3,
+    showlegend = FALSE
+  ) %>%
+  config(displayModeBar = F)
+```
+
+#### Modesty
+```{r}
+#| title: Konstruk Normal - Modesty Rendah
+
+# Menghitung proporsi berdasarkan fakultas
+prop_table <- df_Normal1 %>%
+  group_by(faculty) %>%
+  summarise(
+    Total = n(),
+    Low_Prop = sum(modesty == "Low", na.rm = TRUE) / n()
+  )
+# Visualisasi dengan plotly
+plot_ly(
+  data= prop_table,
+  x = ~Low_Prop,
+  y = ~faculty,
+  type = 'bar',
+  marker = list(color = "steelblue")
+) %>%
+  layout(
+    title = "",
+    xaxis = list(title = "Proporsi", tickformat = ".0%"),
+    yaxis = list(title = ""),
+    bargap = 0.3,
+    showlegend = FALSE
+  ) %>%
+  config(displayModeBar = F)
+```
+#### Moodiness
+```{r}
+#| title: Konstruk Normal - Moodiness Tinggi
+
+# Menghitung proporsi berdasarkan fakultas
+prop_table <- df_Normal1 %>%
+  group_by(faculty) %>%
+  summarise(
+    Total = n(),
+    Low_Prop = sum(moodiness == "High", na.rm = TRUE) / n()
+  )
+# Visualisasi dengan plotly
+plot_ly(
+  data= prop_table,
+  x = ~Low_Prop,
+  y = ~faculty,
+  type = 'bar',
+  marker = list(color = "#FF6E21")
+) %>%
+  layout(
+    title = "",
+    xaxis = list(title = "Proporsi", tickformat = ".0%"),
+    yaxis = list(title = ""),
+    bargap = 0.3,
+    showlegend = FALSE
+  ) %>%
+  config(displayModeBar = F)
+```
+
+#### orderlines {.tabset}
+```{r}
+#| title: Konstruk Normal - Orderlines Tinggi
+# Menghitung proporsi berdasarkan fakultas
+prop_table <- df_Normal1 %>%
+  group_by(faculty) %>%
+  summarise(
+    Total = n(),
+    Low_Prop = sum(orderlines == "High", na.rm = TRUE) / n()
+  )
+# Visualisasi dengan plotly
+plot_ly(
+  data= prop_table,
+  x = ~Low_Prop,
+  y = ~faculty,
+  type = 'bar',
+  marker = list(color = "#FF6E21")
+) %>%
+  layout(
+    title = "",
+    xaxis = list(title = "Proporsi", tickformat = ".0%"),
+    yaxis = list(title = ""),
+    bargap = 0.3,
+    showlegend = FALSE
+  ) %>%
+  config(displayModeBar = F)
+```
+```{r}
+#| title: Konstruk Normal - Orderlines Rendah
+# Menghitung proporsi berdasarkan fakultas
+prop_table <- df_Normal1 %>%
+  group_by(faculty) %>%
+  summarise(
+    Total = n(),
+    Low_Prop = sum(orderlines == "Low", na.rm = TRUE) / n()
+  )
+# Visualisasi dengan plotly
+plot_ly(
+  data= prop_table,
+  x = ~Low_Prop,
+  y = ~faculty,
+  type = 'bar',
+  marker = list(color = "steelblue")
+) %>%
+  layout(
+    title = "",
+    xaxis = list(title = "Proporsi", tickformat = ".0%"),
+    yaxis = list(title = ""),
+    bargap = 0.3,
+    showlegend = FALSE
+  ) %>%
+  config(displayModeBar = F)
+```
+
+#### Self Indulgence
+```{r}
+#| title: Konstruk Normal - Self Indulgence Tinggi
+
+# Menghitung proporsi berdasarkan fakultas
+prop_table <- df_Normal1 %>%
+  group_by(faculty) %>%
+  summarise(
+    Total = n(),
+    Low_Prop = sum(self_indulgence == "High", na.rm = TRUE) / n()
+  )
+# Visualisasi dengan plotly
+plot_ly(
+  data= prop_table,
+  x = ~Low_Prop,
+  y = ~faculty,
+  type = 'bar',
+  marker = list(color = "#FF6E21")
+) %>%
+  layout(
+    title = "",
+    xaxis = list(title = "Proporsi", tickformat = ".0%"),
+    yaxis = list(title = ""),
+    bargap = 0.3,
+    showlegend = FALSE
+  ) %>%
+  config(displayModeBar = F)
+```
+
+#### Self Reliance
+```{r}
+#| title: Konstruk Normal - Self Reliance Rendah
+
+# Menghitung proporsi berdasarkan fakultas
+prop_table <- df_Normal1 %>%
+  group_by(faculty) %>%
+  summarise(
+    Total = n(),
+    Low_Prop = sum(self_reliance == "Low", na.rm = TRUE) / n()
+  )
+# Visualisasi dengan plotly
+plot_ly(
+  data= prop_table,
+  x = ~Low_Prop,
+  y = ~faculty,
+  type = 'bar',
+  marker = list(color = "steelblue")
+) %>%
+  layout(
+    title = "",
+    xaxis = list(title = "Proporsi", tickformat = ".0%"),
+    yaxis = list(title = ""),
+    bargap = 0.3,
+    showlegend = FALSE
+  ) %>%
+  config(displayModeBar = F)
+```
+#### Sincerity
+```{r}
+#| title: Konstruk Normal - Sincerity Rendah
+
+# Menghitung proporsi berdasarkan fakultas
+prop_table <- df_Normal1 %>%
+  group_by(faculty) %>%
+  summarise(
+    Total = n(),
+    Low_Prop = sum(sincerity == "Low", na.rm = TRUE) / n()
+  )
+# Visualisasi dengan plotly
+plot_ly(
+  data= prop_table,
+  x = ~Low_Prop,
+  y = ~faculty,
+  type = 'bar',
+  marker = list(color = "steelblue")
+) %>%
+  layout(
+    title = "",
+    xaxis = list(title = "Proporsi", tickformat = ".0%"),
+    yaxis = list(title = ""),
+    bargap = 0.3,
+    showlegend = FALSE
+  ) %>%
+  config(displayModeBar = F)
+```
+#### sociability {.tabset}    
+
+```{r}
+#| title: Konstruk Normal - Sociability Tinggi
+# Menghitung proporsi berdasarkan fakultas
+prop_table <- df_Normal1 %>%
+  group_by(faculty) %>%
+  summarise(
+    Total = n(),
+    Low_Prop = sum(sociability == "High", na.rm = TRUE) / n()
+  )
+# Visualisasi dengan plotly
+plot_ly(
+  data= prop_table,
+  x = ~Low_Prop,
+  y = ~faculty,
+  type = 'bar',
+  marker = list(color = "#FF6E21")
+) %>%
+  layout(
+    title = "",
+    xaxis = list(title = "Proporsi", tickformat = ".0%"),
+    yaxis = list(title = ""),
+    bargap = 0.3,
+    showlegend = FALSE
+  ) %>%
+  config(displayModeBar = F)
+```
+```{r}
+#| title: Konstruk Normal - Sociability Rendah
+# Menghitung proporsi berdasarkan fakultas
+prop_table <- df_Normal1 %>%
+  group_by(faculty) %>%
+  summarise(
+    Total = n(),
+    Low_Prop = sum(sociability == "Low", na.rm = TRUE) / n()
+  )
+# Visualisasi dengan plotly
+plot_ly(
+  data= prop_table,
+  x = ~Low_Prop,
+  y = ~faculty,
+  type = 'bar',
+  marker = list(color = "steelblue")
+) %>%
+  layout(
+    title = "",
+    xaxis = list(title = "Proporsi", tickformat = ".0%"),
+    yaxis = list(title = ""),
+    bargap = 0.3,
+    showlegend = FALSE
+  ) %>%
+  config(displayModeBar = F)
+```
+
+#### tolerance
+```{r}
+#| title: Konstruk Normal - Tolerance Rendah
+
+# Menghitung proporsi berdasarkan fakultas
+prop_table <- df_Normal1 %>%
+  group_by(faculty) %>%
+  summarise(
+    Total = n(),
+    Low_Prop = sum(tolerance == "Low", na.rm = TRUE) / n()
+  )
+# Visualisasi dengan plotly
+plot_ly(
+  data= prop_table,
+  x = ~Low_Prop,
+  y = ~faculty,
+  type = 'bar',
+  marker = list(color = "steelblue")
+) %>%
+  layout(
+    title = "",
+    xaxis = list(title = "Proporsi", tickformat = ".0%"),
+    yaxis = list(title = ""),
+    bargap = 0.3,
+    showlegend = FALSE
+  ) %>%
+  config(displayModeBar = F)
+```
+#### trustfulness 
+```{r}
+#| title: Konstruk Normal - Trustfulness Rendah
+
+# Menghitung proporsi berdasarkan fakultas
+prop_table <- df_Normal1 %>%
+  group_by(faculty) %>%
+  summarise(
+    Total = n(),
+    Low_Prop = sum(trustfulness == "Low", na.rm = TRUE) / n()
+  )
+# Visualisasi dengan plotly
+plot_ly(
+  data= prop_table,
+  x = ~Low_Prop,
+  y = ~faculty,
+  type = 'bar',
+  marker = list(color = "steelblue")
+) %>%
+  layout(
+    title = "",
+    xaxis = list(title = "Proporsi", tickformat = ".0%"),
+    yaxis = list(title = ""),
+    bargap = 0.3,
+    showlegend = FALSE
+  ) %>%
+  config(displayModeBar = F)
+```
+#### Warmth
+```{r}
+#| title: Konstruk Normal - Warmth Rendah
+
+# Menghitung proporsi berdasarkan fakultas
+prop_table <- df_Normal1 %>%
+  group_by(faculty) %>%
+  summarise(
+    Total = n(),
+    Low_Prop = sum(warmth == "Low", na.rm = TRUE) / n()
+  )
+# Visualisasi dengan plotly
+plot_ly(
+  data= prop_table,
+  x = ~Low_Prop,
+  y = ~faculty,
+  type = 'bar',
+  marker = list(color = "steelblue")
+) %>%
+  layout(
+    title = "",
+    xaxis = list(title = "Proporsi", tickformat = ".0%"),
+    yaxis = list(title = ""),
+    bargap = 0.3,
+    showlegend = FALSE
+  ) %>%
+  config(displayModeBar = F)
+```
+
+# Data
+## Row {height=90%}
+
+```{r}
+#| title: Data
+
+# Memuat data
+df1 <- read_excel("teskepribadian_export_20241021.xlsx")
+
+# Preproses data
+df1 <- df1 |>
+  # Menghapus kata "Fakultas " dari kolom Fakultas
+  mutate(Fakultas = gsub("Fakultas ", "", Fakultas)) |>
+  # Mengganti nama Fakultas tertentu
+  mutate(Fakultas = ifelse(Fakultas == "Komunikasi Dan Ilmu Sosial", "Komunikasi dan Ilmu Sosial", Fakultas)) |>
+  # Menghapus data duplikat berdasarkan semua kolom
+  distinct(.keep_all = TRUE) |>
+  # Menghapus kolom ke-5
+  select(-5)
+
+df1$highlight <- ifelse(
+  df1$variable_response_inconsistency >= 70,
+  1,  # Kondisi terpenuhi
+  0   # Kondisi tidak terpenuhi
+)
+# Mutate untuk menambahkan kolom baru
+df1 <- df1 %>%
+  mutate(
+    bg_color = case_when(
+      highlight == 1 ~ 'red',
+      highlight == 0 & rowSums(select(., 30:39) >= 70, na.rm = TRUE) > 0 ~ 'yellow',
+      TRUE ~ 'transparent'
+    ),
+    N_Gangguan = rowSums(select(., 30:39) >= 70, na.rm = TRUE)
+  ) %>%
+  select(N_Gangguan, everything())  # Pindahkan kolom N_Gangguan ke depan
+
+# Membuat tabel interaktif dengan gradasi warna
+df1 %>%
+  datatable(options = list(dom = 'ftp', paging = TRUE)) %>%
+  formatStyle(
+    'bg_color',  # Menyesuaikan warna latar belakang berdasarkan bg_color
+    target = 'row',
+    backgroundColor = styleEqual(
+      c('transparent', 'yellow', 'red'),
+      c('transparent', 'yellow', 'red')
+    )
+  ) %>%
+  formatStyle(
+    'N_Gangguan',  # Kolom yang ingin diberi warna berdasarkan gradasi
+    backgroundColor = styleInterval(
+      seq(1, 9, by = 1),  # Interval untuk nilai 1 hingga 10
+      colorRampPalette(c('lightblue', 'blue'))(10)  # Gradasi warna untuk 10 langkah
+    ),
+    color = 'white'  # Warna teks dalam kolom N_Gangguan
+  )
+```
+
+## Row {height=10%}
+
+```{r}
+#| component: valuebox
+#| title: "Tidak Valid (Harus Mengisi Ulang Tes OMNI)"
+
+list(
+  icon = "person",
+  color = "red",
+  value = ""
+)
+```
+```{r}
+#| component: valuebox
+#| title: "Gangguan Kepribadian"
+
+list(
+  icon = "person",
+  color = "yellow",
+  value = ""
+  )
+```
+
+```{r}
+#| component: valuebox
+#| title: "Transparan = Valid dan Normal"
+
+list(
+  icon = "person",
+  color = "primary",
+  value = ""
+)
+```
