@@ -1,6 +1,7 @@
 project:
   type: website
-  output-dir: docs
+  output-dir: "./_output"
+  post-render: encrypt.r
 
 website:
   title: "Telkom University"
