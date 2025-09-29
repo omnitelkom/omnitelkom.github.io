@@ -1,8 +1,9 @@
 project:
   type: website
+  output-dir: docs
 
 website:
-  title: "X University"
+  title: "Telkom University"
 
 format: dashboard
 fig-width: 10

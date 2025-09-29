@@ -1,7 +1,7 @@
 ---
-title: "X University"
+title: "Telkom University"
 format: dashboard
-logo: logods2.webp
+logo: images.png
 fig-width: 10
 fig-asp: 0.3
 theme: [sandstone, themes/dashboard.scss]
@@ -25,7 +25,7 @@ load("df1.RData")
 
 Dasbor ini menampilkan statistik untuk:
 
-**Hasil Tes Tipe Kepribadian dan Gangguan Kepribadian Mahasisswa X University**
+**Hasil Tes Tipe Kepribadian dan Gangguan Kepribadian Mahasiswa Telkom University**
 
 ------------------------------------------------------------------------
 
